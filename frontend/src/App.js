@@ -106,18 +106,32 @@ function App() {
   // Fetch all saved inspirations from Supabase
   const loadCollections = async () => {
     setFetchingCollections(true);
-    // Lazy load Supabase client
-    const { createClient } = await import('@supabase/supabase-js');
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+    setError('');
     try {
-      const { data, error } = await supabase
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+      // Some environments require .select() columns as array of string as 2nd parameter
+      // Defensive fetch for all columns as '*'
+      let query = supabase
         .from('inspirations')
-        .select('*')
-        .order('id', { ascending: false });
+        .select('*');
+
+      // .order() may throw if shape is unexpected, so catch this as well
+      let data, error;
+      try {
+        ({ data, error } = await query.order('id', { ascending: false }));
+      } catch (err) {
+        // fallback: query without ordering if ordering key is not present or fails
+        ({ data, error } = await query);
+      }
+
       if (error) {
+        setCollections([]);
         setError('Failed to fetch collections.');
       } else {
-        setCollections(data || []);
+        // Validate that data is an array of collection items
+        setCollections(Array.isArray(data) ? data : []);
       }
     } catch (e) {
       setError('Failed to fetch collections.');
