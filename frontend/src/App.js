@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
+// Import Supabase client for saving liked images to user's collection
+import { createClient } from '@supabase/supabase-js';
 
 // Room types for filter
 const ROOM_TYPES = [
@@ -18,6 +20,13 @@ function App() {
   const [lightbox, setLightbox] = useState({ open: false, image: null });
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [saveStatus, setSaveStatus] = useState({}); // key: image.id, value: "idle" | "saving" | "saved" | "error"
+
+  // Enable this block and add your Supabase credentials –
+  // For security in production, move them to environment variables.
+  const SUPABASE_URL = "https://YOUR_SUPABASE_URL.supabase.co"; // TODO: Fill in
+  const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY"; // TODO: Fill in
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   const PEXELS_API_KEY = 'o5vafzhrOvAK64hVAyrIH4LFL0zxxH3l1xpTiJ8otUfkzmQbWXNjaN1F';
 
@@ -69,6 +78,31 @@ function App() {
 
   // PUBLIC_INTERFACE
   const closeLightbox = () => setLightbox({ open: false, image: null });
+
+  // PUBLIC_INTERFACE
+  // Save liked image to Supabase collection
+  async function handleAddToCollection(img) {
+    setSaveStatus((prev) => ({ ...prev, [img.id]: "saving" }));
+    // Create a collection table named `liked_images` (manual, or use SQL in Supabase)
+    // Table should have columns such as: id (image id), url, alt, photographer, src
+    try {
+      // Only store minimal fields required for gallery restoration
+      const { error } = await supabase.from("liked_images").insert({
+        image_id: img.id,
+        url: img.url,
+        alt: img.alt,
+        photographer: img.photographer,
+        src: JSON.stringify(img.src)
+      });
+      if (error) {
+        setSaveStatus((prev) => ({ ...prev, [img.id]: "error" }));
+      } else {
+        setSaveStatus((prev) => ({ ...prev, [img.id]: "saved" }));
+      }
+    } catch (e) {
+      setSaveStatus((prev) => ({ ...prev, [img.id]: "error" }));
+    }
+  }
 
   return (
     <div className="App">
@@ -156,6 +190,28 @@ function App() {
                 />
                 <figcaption className="img-caption">
                   {img.photographer}
+                  {/* Add to Collection Button */}
+                  <button
+                    className="save-btn"
+                    style={{ marginLeft: "10px" }}
+                    onClick={e => {
+                      e.stopPropagation();
+                      if (saveStatus[img.id] !== "saving" && saveStatus[img.id] !== "saved") {
+                        handleAddToCollection(img);
+                      }
+                    }}
+                    disabled={saveStatus[img.id] === "saving" || saveStatus[img.id] === "saved"}
+                    aria-label={
+                      saveStatus[img.id] === "saved"
+                        ? "Already added to collection"
+                        : "Add image to collection"
+                    }
+                  >
+                    {saveStatus[img.id] === "idle" || !saveStatus[img.id] ? "Add to Collection"
+                      : saveStatus[img.id] === "saving" ? "Saving..."
+                      : saveStatus[img.id] === "saved" ? "Saved!"
+                      : "Try Again"}
+                  </button>
                 </figcaption>
               </figure>
             ))}
